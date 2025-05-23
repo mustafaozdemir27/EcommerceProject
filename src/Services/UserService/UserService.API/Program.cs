@@ -1,67 +1,143 @@
 ﻿// UserService.API/Program.cs
-using Common.Infrastructure.Data; // IUnitOfWork için
-using FluentValidation; // AddValidatorsFromAssemblyContaining için (veya ilgili extension metodun namespace'i)
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using UserService.API.Middleware;
+using Microsoft.Extensions.Logging; // LogLevel için (EF Core loglamasında)
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models; // OpenApiInfo ve OpenApiSecurityScheme için
+using System.Text;
+using UserService.Application.Configuration; // JwtSettings için
+using UserService.Application.Contracts.Security; // IPasswordHasherService, IJwtTokenGenerator için
 using UserService.Application.Features.Users.Commands.RegisterUser; // RegisterUserCommandHandler ve RegisterUserCommandValidator (assembly bulmak için)
 using UserService.Application.Mappings; // UserProfile (AutoMapper profili) için
 using UserService.Domain.Repositories; // IUserRepository için
+using UserService.Infrastructure.Persistence; // UserDbContext için
 using UserService.Infrastructure.Persistence.Repositories; // UserRepository için
+using UserService.Infrastructure.Security; // BCryptPasswordHasherService, JwtTokenGenerator için
+using Common.Infrastructure.Data; // IUnitOfWork için
+using FluentValidation; // AddValidatorsFromAssemblyContaining için
+using UserService.API.Middleware; // ExceptionHandlingMiddleware için
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Servisleri container'a ekleme (Dependency Injection)
 
-// DbContext'i ve IUnitOfWork'ü ekle
-builder.Services.AddDbContext<UserDbContext>(options =>
-{
-    options.UseSqlServer(builder.Configuration.GetConnectionString("UserServiceDb"));
-    // Geliştirme ortamında EF Core tarafından çalıştırılan SQL komutlarını ve parametreleri görmek faydalıdır.
-    // Üretimde LogLevel.Information veya LogLevel.Warning daha uygun olabilir.
-    if (builder.Environment.IsDevelopment())
-    {
-        options.LogTo(Console.WriteLine, LogLevel.Information); // Temel loglama
-        options.EnableSensitiveDataLogging(); // Sadece geliştirme ortamında!
-    }
-});
-
-// IUnitOfWork istendiğinde, AddDbContext ile kaydedilen UserDbContext örneğinin kullanılmasını sağla
-builder.Services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<UserDbContext>());
-
-// Repository'leri ekle
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-
-// MediatR'ı ekle (Application katmanındaki handler'ları bulacak)
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(typeof(RegisterUserCommandHandler).Assembly));
-
-// AutoMapper'ı ekle (Application katmanındaki profilleri bulacak)
-builder.Services.AddAutoMapper(typeof(UserProfile).Assembly);
-
-// FluentValidation'ı ekle (Application katmanındaki validator'ları bulacak)
-// FluentValidation.AspNetCore paketindeki eski metotlar (AddFluentValidationAutoValidation vb.)
-// yerine FluentValidation.DependencyInjectionExtensions paketindeki bu metodu kullanıyoruz.
-builder.Services.AddValidatorsFromAssemblyContaining<RegisterUserCommandValidator>(ServiceLifetime.Scoped);
-
-
-builder.Services.AddControllers(); // Controller'ları kullanacağımızı belirtiyoruz.
-
-// Swagger/OpenAPI yapılandırması
+// --- Temel Servisler ---
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// --- Swagger/OpenAPI Yapılandırması ---
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    options.SwaggerDoc("v1", new OpenApiInfo
     {
         Version = "v1",
         Title = "User Service API",
         Description = "An ASP.NET Core Web API for managing Users"
     });
+
+    // JWT Authentication'ı Swagger UI'a entegre etme (Authorize butonu için)
+    // SecuritySchemeType.Http ve scheme: "bearer" kullanarak daha iyi entegrasyon
+    options.AddSecurityDefinition("BearerAuth", new OpenApiSecurityScheme // Tanım için bir isim (örn: BearerAuth)
+    {
+        Name = "Authorization", // Header adı
+        Type = SecuritySchemeType.Http, // HTTP tabanlı kimlik doğrulama
+        Scheme = "bearer", // Kullanılacak şema (küçük harfle "bearer")
+        BearerFormat = "JWT", // Token formatı
+        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme. \r\n\r\n" +
+                      "Enter your token in the text input below (without the 'Bearer ' prefix). \r\n\r\n" +
+                      "Example: \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\""
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "BearerAuth" // AddSecurityDefinition'da verdiğimiz ID ile eşleşmeli
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+// --- Uygulama Yapılandırmaları ---
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
+
+// --- Veritabanı ve UnitOfWork ---
+builder.Services.AddDbContext<UserDbContext>(options =>
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("UserServiceDb"));
+    if (builder.Environment.IsDevelopment())
+    {
+        options.LogTo(Console.WriteLine, LogLevel.Information);
+        options.EnableSensitiveDataLogging();
+    }
+});
+builder.Services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<UserDbContext>());
+
+// --- Repository'ler ---
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+
+// --- Uygulama Servisleri ve Yardımcıları ---
+builder.Services.AddSingleton<IPasswordHasherService, BCryptPasswordHasherService>();
+builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+
+// --- MediatR ---
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(RegisterUserCommandHandler).Assembly));
+
+// --- AutoMapper ---
+builder.Services.AddAutoMapper(typeof(UserProfile).Assembly);
+
+// --- FluentValidation ---
+builder.Services.AddValidatorsFromAssemblyContaining<RegisterUserCommandValidator>(ServiceLifetime.Scoped);
+
+// --- Authentication (JWT Bearer) ---
+var jwtSettingsFromConfig = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
+if (jwtSettingsFromConfig == null || string.IsNullOrEmpty(jwtSettingsFromConfig.Key) ||
+    string.IsNullOrEmpty(jwtSettingsFromConfig.Issuer) || string.IsNullOrEmpty(jwtSettingsFromConfig.Audience))
+{
+    // Bu kontrol, uygulamanın başlangıcında kritik JWT ayarlarının eksik olup olmadığını doğrular.
+    // Eğer eksikse, ArgumentNullException yerine InvalidOperationException fırlatmak daha uygun olabilir,
+    // çünkü bu bir programlama hatasından ziyade eksik yapılandırma sorunudur.
+    throw new InvalidOperationException($"JWT settings ('{JwtSettings.SectionName}') section with Key, Issuer, and Audience must be configured in appsettings.json for JWT Authentication setup.");
+}
+var keyBytes = Encoding.UTF8.GetBytes(jwtSettingsFromConfig.Key);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.SaveToken = true;
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = jwtSettingsFromConfig.Issuer,
+
+        ValidateAudience = true,
+        ValidAudience = jwtSettingsFromConfig.Audience,
+
+        ValidateLifetime = true,
+        IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
+        ValidateIssuerSigningKey = true,
+
+        ClockSkew = TimeSpan.Zero
+    };
 });
 
 
-var app = builder.Build();
-
 // 2. HTTP request pipeline'ını yapılandırma
+var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
@@ -69,31 +145,24 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "User Service API V1");
-        // options.RoutePrefix = string.Empty; // Swagger UI'ı ana sayfada göstermek için
     });
-    app.UseDeveloperExceptionPage(); // Geliştirme ortamında detaylı hata sayfası
+    app.UseDeveloperExceptionPage();
 }
 else
 {
-    // Üretim ortamı için genel bir hata handler'ı eklenebilir.
     // app.UseExceptionHandler("/Error");
-    // app.UseHsts(); // HTTPS Strict Transport Security
+    // app.UseHsts();
 }
 
-// Exception Handling Middleware'imizi pipeline'a ekle
-// Bu, UseRouting gibi diğer middleware'lerden önce gelirse daha geniş kapsamlı hata yakalama sağlar.
-// Ancak UseDeveloperExceptionPage'den sonra gelmesi, geliştirme ortamında öncelikle onun çalışmasını sağlar.
-// Genellikle pipeline'ın başlarında, ancak statik dosyalar veya routing gibi temel şeylerden sonra yer alır.
-// UseDeveloperExceptionPage'i sadece geliştirme için tutuyorsak, bu middleware'i onun dışına koyabiliriz.
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// app.UseHttpsRedirection(); // HTTPS yönlendirmesi (API Gateway arkasında çalışıyorsa veya Kestrel'de SSL yoksa kapatılabilir)
+// app.UseHttpsRedirection();
 
-app.UseRouting(); // Routing middleware'i
+app.UseRouting();
 
-// app.UseAuthentication(); // Kimlik doğrulama eklendiğinde bu satır aktif edilecek
-app.UseAuthorization(); // Yetkilendirme middleware'i
+app.UseAuthentication(); // Kimlik doğrulama
+app.UseAuthorization();  // Yetkilendirme
 
-app.MapControllers(); // Controller endpoint'lerini eşle
+app.MapControllers();
 
 app.Run();
