@@ -1,0 +1,79 @@
+﻿{
+  "Routes": [
+    // --- UserService Routes (Mevcut Olanlar) ---
+    {
+      "DownstreamPathTemplate": "/api/users",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7052
+        }
+      ], // UserService portu
+      "UpstreamPathTemplate": "/gateway/users",
+      "UpstreamHttpMethod": [ "Post" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/users",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7052
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/users",
+      "UpstreamHttpMethod": [ "Get" ],
+      "AuthenticationOptions": {
+        "AuthenticationProviderKey": "GatewayAuthenticationScheme",
+        "AllowedScopes": []
+      }
+    },
+    // ... (UserService için diğer mevcut route'larınız) ...
+    {
+      "DownstreamPathTemplate": "/api/users/login",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7052
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/users/login",
+      "UpstreamHttpMethod": [ "Post" ]
+    },
+
+    // === ProductService Routes (YENİ EKLENECEKLER) ===
+    {
+      "DownstreamPathTemplate": "/api/products",
+      "DownstreamScheme": "https", // ProductService.API'nin şeması
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7053 // ProductService.API'nin çalıştığı port (KENDİ PORTUNUZLA DEĞİŞTİRİN)
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/products", // Gateway üzerinden erişim path'i
+      "UpstreamHttpMethod": [ "Post", "Get" ] // Ürün oluşturma ve listeleme için
+      // Bu route için AuthenticationOptions ekleyebiliriz (örn: ürün listeleme korumalıysa Get için)
+      // Şimdilik ProductService.API'de JWT auth olmadığı için eklemiyoruz.
+      // Eğer ProductService.API'deki GET /api/products endpoint'i [Authorize] ile korunacaksa,
+      // buraya da GET metodu için AuthenticationOptions eklenmeli.
+    },
+    {
+      "DownstreamPathTemplate": "/api/products/{id}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7053 // ProductService.API'nin çalıştığı port
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/products/{id}",
+      "UpstreamHttpMethod": [ "Get" ] // ID ile ürün getirme
+      // Bu route için de AuthenticationOptions gerekirse eklenebilir.
+    }
+    // İleride ürün güncelleme (PUT) ve silme (DELETE) için de benzer route'lar eklenecek.
+  ],
+  "GlobalConfiguration": {}
+}

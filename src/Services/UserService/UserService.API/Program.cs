@@ -19,6 +19,36 @@ using UserService.API.Middleware; // ExceptionHandlingMiddleware için
 
 var builder = WebApplication.CreateBuilder(args);
 
+// === DEBUG SATIRLARI BAŞLANGIÇ ===
+Console.WriteLine("--- UserService.API Program.cs (DEBUG START) ---");
+Console.WriteLine($"UserService.API Environment: {builder.Environment.EnvironmentName}");
+Console.WriteLine($"UserService.API ContentRootPath: {builder.Environment.ContentRootPath}");
+
+// Doğrudan configuration üzerinden Key ve Issuer okuma denemesi
+var directJwtKey = builder.Configuration["JwtSettings:Key"];
+Console.WriteLine($"DEBUG (UserService.API): Configuration['JwtSettings:Key'] = '{directJwtKey}'");
+
+var directJwtIssuer = builder.Configuration["JwtSettings:Issuer"];
+Console.WriteLine($"DEBUG (UserService.API): Configuration['JwtSettings:Issuer'] = '{directJwtIssuer}'");
+
+// JwtSettings bölümünü kontrol etme
+var jwtSettingsSectionForDebug = builder.Configuration.GetSection("JwtSettings"); // <-- Değişken burada tanımlanıyor
+
+if (jwtSettingsSectionForDebug.Exists()) // <-- Tanımlanan değişken burada kullanılıyor
+{
+    Console.WriteLine("DEBUG (UserService.API): 'JwtSettings' bölümü yapılandırmada MEVCUT.");
+    var keyFromSection = jwtSettingsSectionForDebug["Key"]; // <-- Tanımlanan değişken burada kullanılıyor
+    Console.WriteLine($"DEBUG (UserService.API): 'JwtSettings:Key' from GetSection = '{keyFromSection}'");
+    var issuerFromSection = jwtSettingsSectionForDebug["Issuer"]; // Ek kontrol
+    Console.WriteLine($"DEBUG (UserService.API): 'JwtSettings:Issuer' from GetSection = '{issuerFromSection}'");
+}
+else
+{
+    Console.WriteLine("DEBUG (UserService.API): 'JwtSettings' bölümü yapılandırmada MEVCUT DEĞİL.");
+}
+Console.WriteLine("--- UserService.API Program.cs (DEBUG END) ---");
+// === DEBUG SATIRLARI SONU ===
+
 // 1. Servisleri container'a ekleme (Dependency Injection)
 
 // --- Temel Servisler ---
