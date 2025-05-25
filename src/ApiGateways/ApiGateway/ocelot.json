@@ -72,8 +72,50 @@
       "UpstreamPathTemplate": "/gateway/products/{id}",
       "UpstreamHttpMethod": [ "Get" ] // ID ile ürün getirme
       // Bu route için de AuthenticationOptions gerekirse eklenebilir.
-    }
+    },
     // İleride ürün güncelleme (PUT) ve silme (DELETE) için de benzer route'lar eklenecek.
+    {
+      "DownstreamPathTemplate": "/api/orders",
+      "DownstreamScheme": "https", // OrderService.API'nin şeması
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7054 // OrderService.API'nin çalıştığı port (KENDİ PORTUNUZLA DEĞİŞTİRİN)
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/orders", // Gateway üzerinden erişim path'i
+      "UpstreamHttpMethod": [ "Post", "Get" ]
+      // Sipariş oluşturma POST /gateway/orders
+      // Müşterinin tüm siparişlerini listeleme (eğer genel bir listeleme eklersek GET /gateway/orders)
+      // Şimdilik POST için. GET için ayrı bir route (customer/{id}) tanımlayacağız.
+      // AuthenticationOptions eklenebilir (eğer sipariş oluşturma korumalı olacaksa).
+    },
+    {
+      "DownstreamPathTemplate": "/api/orders/{id}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7054
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/orders/{id}",
+      "UpstreamHttpMethod": [ "Get" ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/orders/customer/{customerId}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 7054
+        }
+      ],
+      "UpstreamPathTemplate": "/gateway/orders/customer/{customerId}",
+      "UpstreamHttpMethod": [ "Get" ]
+    }
+    // Sipariş güncelleme, silme vb. için ileride benzer route'lar eklenecek.
+
   ],
   "GlobalConfiguration": {}
 }

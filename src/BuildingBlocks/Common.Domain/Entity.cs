@@ -33,6 +33,10 @@ namespace Common.Domain
         // EF Core gibi ORM'ler için parametresiz constructor gerekebilir.
         protected Entity()
         {
+            // Bu constructor, EF Core'un entity'leri materyalize etmesi için gereklidir.
+            // ID'nin varsayılan bir değer olmaması için burada da kontrol yapılabilir.
+            // Ancak, bu durumda ID'nin null veya varsayılan değer olabileceğini kabul ediyoruz.
+            Id = default!;
         }
 
         public override bool Equals(object? obj)
