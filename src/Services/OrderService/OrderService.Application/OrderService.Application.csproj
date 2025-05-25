@@ -13,10 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BuildingBlocks\Common.Application\Common.Application.csproj" />
-    <ProjectReference Include="..\..\src\BuildingBlocks\Common.Domain\Common.Domain.csproj" />
-    <ProjectReference Include="..\..\src\BuildingBlocks\Common.Infrastructure\Common.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\src\Services\OrderService\OrderService.Domain\OrderService.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\Common.Infrastructure\Common.Infrastructure.csproj" />
+    <ProjectReference Include="..\OrderService.Domain\OrderService.Domain.csproj" />
   </ItemGroup>
 
 </Project>
